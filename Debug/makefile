@@ -60,8 +60,8 @@ all: main-build
 main-build: SPI_V_I_W.elf secondary-outputs
 
 # Tool invocations
-SPI_V_I_W.elf SPI_V_I_W.map: $(OBJS) $(USER_OBJS) C:\Users\Usuario\Downloads\PracticasFinales\SPI_V_I_W\STM32G0B1RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "SPI_V_I_W.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0plus -T"C:\Users\Usuario\Downloads\PracticasFinales\SPI_V_I_W\STM32G0B1RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SPI_V_I_W.map" -Wl,--gc-sections -static -u _printf_float --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+SPI_V_I_W.elf SPI_V_I_W.map: $(OBJS) $(USER_OBJS) C:\Users\Usuario\Downloads\STM32CubeIDE\ PracticasFinales\SPI_V_I_W\STM32G0B1RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "SPI_V_I_W.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0plus -T"C:\Users\Usuario\Downloads\STM32CubeIDE PracticasFinales\SPI_V_I_W\STM32G0B1RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SPI_V_I_W.map" -Wl,--gc-sections -static -u _printf_float --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

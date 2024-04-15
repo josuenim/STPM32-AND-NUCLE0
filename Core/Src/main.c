@@ -27,9 +27,8 @@ char buf_tx7[20];
 char buf_tx8[20];
 char buf_tx9[20];
 char buf_tx10[20];
-int inicio =0;
-/* Function to combine received bytes into a 32-bit integer */
-uint32_t combine_bytes(uint8_t *rx_data);
+int trama_enviada =0;
+
 /* Data buffer to receive response */
 uint8_t rx_data[5];
 
@@ -41,6 +40,7 @@ uint8_t data2[5];
 uint8_t data3[5];
 
 double Ks = 2.4e-3;
+
 
 
 int main(void)
@@ -56,76 +56,64 @@ int main(void)
 
  char *texto = "\n\r Reinicio ... \n";
   HAL_UART_Transmit(&huart2, (uint8_t*)texto, strlen(texto), HAL_MAX_DELAY);
-  /*Tiempo para bloquear la elección de la interfaz CS up*/
+  /*Pin CS down para bloquear la eleccion de protocolo SPI*/
   HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
-
-  /*Reset global-Garantizar una correcta inicializacion del DSP */
-
-
   while (1)
   {
-	  //reinicioDSP();
-	  if (HAL_GPIO_ReadPin(GPIOC, BUTTON_Pin) == GPIO_PIN_RESET && inicio == 0) {
-	  //lectura y actualizacion de datos V  I
-	  for(int j=0;j<3;j++){
-		  reinicioRegistros();
-
+	  if (HAL_GPIO_ReadPin(GPIOC, BUTTON_Pin) == GPIO_PIN_RESET && trama_enviada == 0) {
+	  reinicioRegistro1();
+	  for(int j=0;j<16;j++){
+      capturaDatos();
 	  /*CS Inicio de comunicacion */
-		   HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
 
-	  //LED ON
-		  HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_SET);
-		  /*---------------------    Solicitud direccion de lectura direccion 0x48 fila 36  --------------------------*/
-		 uint8_t data1[5] = {0x48, 0xFF, 0xFF, 0xFF, 0x00};
-		 /* Calculate CRC */
-		 data1[4] = calculate_crc(data1, 4);
-		 /* Transmit data + CRC */
-		 HAL_SPI_Transmit(&hspi1, data1, STPM3x_FRAME_LEN + 1, HAL_MAX_DELAY); // Transmitir la trama completa (datos + CRC)
-		 /*--------------------Recepcion de datos de la direccion 48 (32-bit data + CRC)-------------- */
-		 HAL_SPI_Receive(&hspi1, rx_data1, sizeof(rx_data1), HAL_MAX_DELAY);
+      //LED ON
+      HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_SET);
+      /*---------------------    Solicitud direccion de lectura direccion 0x48 fila 36  --------------------------*/
+      uint8_t data1[5] = {0x48, 0xFF, 0xFF, 0xFF, 0x00};
+      /* Calculate CRC */
+      data1[4] = calculate_crc(data1, 4);
+      /* Transmit data + CRC */
+      HAL_SPI_Transmit(&hspi1, data1, STPM3x_FRAME_LEN + 1, HAL_MAX_DELAY); // Transmitir la trama completa (datos + CRC)
+ /*--------------------Recepcion de datos de la direccion 48 (32-bit data + CRC)-------------- */
+      HAL_SPI_Receive(&hspi1, rx_data1, sizeof(rx_data1), HAL_MAX_DELAY);
 
-		 if(inicio == 0){
-		 char *texto1 = "Trama enviada por SPI \n";
-		 HAL_UART_Transmit(&huart2, (uint8_t*)texto1, strlen(texto1), HAL_MAX_DELAY);
-		 // Enviar datos por UART en formato hexadecimal
-		 for (int i = 0; i < sizeof(data1); i++) {
-			 sprintf(buf_tx, "%02X ", data1[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
-			 HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx, strlen(buf_tx), HAL_MAX_DELAY); // Transmitir el byte por UART
-		 }
-		 inicio=1;
-		 char *texto1_1 = "\n Vrms y Irms  direccion registro 0x48 \n";
-		 HAL_UART_Transmit(&huart2, (uint8_t*)texto1_1, strlen(texto1_1), HAL_MAX_DELAY);
+      if(trama_enviada == 0){
+    	  char *texto1 = "Trama enviada por SPI \n";
+    	  HAL_UART_Transmit(&huart2, (uint8_t*)texto1, strlen(texto1), HAL_MAX_DELAY);
+      // Enviar datos por UART en formato hexadecimal
+      for (int i = 0; i < sizeof(data1); i++) {
+    	  sprintf(buf_tx, "%02X ", data1[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
+    	  HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx, strlen(buf_tx), HAL_MAX_DELAY); // Transmitir el byte por UART
+      }
+      	  char *texto1_1 = "\n Vrms y Irms  direccion registro 0x48 \n";
+      	  HAL_UART_Transmit(&huart2, (uint8_t*)texto1_1, strlen(texto1_1), HAL_MAX_DELAY);
+      	  trama_enviada=1;
+      }
+      for (int i = sizeof(rx_data1) - 1; i >= 0; i--) {
+    	  sprintf(buf_tx2, "%02X ", rx_data1[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
+    	  HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx2, strlen(buf_tx2), HAL_MAX_DELAY); // Transmitir el byte por UART
+      }
 
-		 }
+      /*---Conversion de los registros a valores reales ----*/
+			  uint32_t received_data = (uint32_t)rx_data1[3] << 24 |
+									  (uint32_t)rx_data1[2] << 16 |
+									  (uint32_t)rx_data1[1] << 8 |
+									  (uint32_t)rx_data1[0];
+				  // Bytes [14:0] para calcular Vrms
+				  uint32_t vrms_bytes = received_data & 0x7FFF; // Máscara para obtener los primeros 15 bits
+				  // Calcular el valor VRMS
+				  long long int potencia = pow(2,15);
+				  float vrms_decimal = ((float)vrms_bytes * 1.2 * (1 + 810000.0 / 470)) / (0.875 * 2 * potencia);
 
+				  // Obtener los bytes [31:15] para calcular Irms
+				  uint32_t irms_bytes = received_data >> 15;
+				  long long int potencia2 = pow(2,17);
+				  float irms_decimal = ((float)irms_bytes * 1.2)/ (0.875*16* potencia2 *Ks*1);
 
-
-		 for (int i = sizeof(rx_data1) - 1; i >= 0; i--) {
-			 sprintf(buf_tx2, "%02X ", rx_data1[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
-			 HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx2, strlen(buf_tx2), HAL_MAX_DELAY); // Transmitir el byte por UART
-		 }
-		 uint32_t received_data = (uint32_t)rx_data1[3] << 24 |
-								  (uint32_t)rx_data1[2] << 16 |
-								  (uint32_t)rx_data1[1] << 8 |
-								  (uint32_t)rx_data1[0];
-
-
-	    // Bytes [14:0] para calcular Vrms
-		 uint32_t vrms_bytes = received_data & 0x7FFF; // Máscara para obtener los primeros 15 bits
-		 // Calcular Vrms según la ecuación dada
-		 long long int potencia = pow(2,15);
-		 float vrms_decimal = ((float)vrms_bytes * 1.2 * (1 + 810000.0 / 470)) / (0.875 * 2 * potencia);
-
-			 // Obtener los bytes [31:15] para calcular Irms
-		 uint32_t irms_bytes = received_data >> 15;
-		 long long int potencia2 = pow(2,17);
-		 float irms_decimal = ((float)irms_bytes * 1.2)/ (0.875*16* potencia2 *Ks*1);
-
-
-
-
-		 uint8_t calculated_crc = calculate_crc(rx_data1, 4);
-		 if (calculated_crc == rx_data1[4]) {
+	  /*Deteccion de errores utilizando el metodo CRC*/
+	  uint8_t calculated_crc = calculate_crc(rx_data1, 4);
+		if (calculated_crc == rx_data1[4]) {
 			 char texto3[50];
 			 char texto4[50];
 
@@ -137,214 +125,73 @@ int main(void)
 			 sprintf(texto4, " Irms (%s) \n", buf_tx4);
 			 HAL_UART_Transmit(&huart2, (uint8_t*)texto4, strlen(texto4), HAL_MAX_DELAY);
 
-		 } else {
+		} else {
 			 char *texto5 = "->Incorrect CRC\r\n	";
 			 HAL_UART_Transmit(&huart2, (uint8_t*)texto5, strlen(texto5), HAL_MAX_DELAY);
-		 }
+		}
 
 
-		 calculated_crc = 0;
-		 memset(rx_data1, 0, sizeof(rx_data1));
-		 /* Se cierra la comunicacion SCS --> up */
-		 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
-		 delay_ms(700);
-
-
-	  }//-->end for
-
-
-
-
-
-	  for(int p=0;p<3;p++){
-		  reinicioRegistros();
-		  	/*CS Inicio de comunicacion */
-		  	  HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
-
-			   //LED ON
-			  HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_SET);
-
-			 /*------------------- Solicitud direccion 0x5C Fila 46  PH1 ActivePower [28:0]-------------*/
-			 uint8_t data2[5] = {0x5C, 0xFF, 0xFF, 0xFF, 0x00};
-			 		 /* Calculate CRC */
-				 	 data2[4] = calculate_crc(data2, 4);
-			 		 /* Transmit data + CRC */
-				 HAL_SPI_Transmit(&hspi1, data2, STPM3x_FRAME_LEN + 1, HAL_MAX_DELAY); // Transmitir la trama completa (datos + CRC)
-				 /*--------------------Recepcion de datos de la direccion 5C (32-bit data + CRC)-------------- */
-				 HAL_SPI_Receive(&hspi1, rx_data2, sizeof(rx_data2), HAL_MAX_DELAY);
-
-				if(inicio == 1){
-						 char *texto6 = "Trama enviada por SPI \n";
-						 HAL_UART_Transmit(&huart2, (uint8_t*)texto6, strlen(texto6), HAL_MAX_DELAY);
-						 // Enviar datos por UART en formato hexadecimal
-						 for (int i = 0; i < sizeof(data2); i++) {
-							 sprintf(buf_tx5, "%02X ", data2[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
-							 HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx5, strlen(buf_tx5), HAL_MAX_DELAY); // Transmitir el byte por UART
-						 }
-						 char *texto6_1 = "\n Potecia Activa direccion registro 0x5C \n";
-						 HAL_UART_Transmit(&huart2, (uint8_t*)texto6_1, strlen(texto6_1), HAL_MAX_DELAY);
-						}
-
-				for (int i = sizeof(rx_data2) - 1; i >= 0; i--) {
-					 sprintf(buf_tx6, "%02X ", rx_data2[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
-					 HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx6, strlen(buf_tx6), HAL_MAX_DELAY); // Transmitir el byte por UART
-				 	 }
-						uint32_t received_data_PA =   (uint32_t)rx_data2[3] << 24 |
-													  (uint32_t)rx_data2[2] << 16 |
-													  (uint32_t)rx_data2[1] << 8 |
-													  (uint32_t)rx_data2[0];
-
-					 // Bytes [28:0] para calcular LSBp
-						 uint32_t LSBp_bytes = received_data_PA & 0x0FFFFFFF; // Esta máscara tiene los primeros 28 bits
-						 // Calcular LSBp según la ecuación dada
-					 long long int potencia2 = pow(2,28);
-					 double Vref2 = pow(1.2,2);
-					 float LSBp_decimal = ((float)LSBp_bytes * Vref2 * (1 + 810000.0 / 470)) / (1*2*16*Ks*0.875*0.875* potencia2);
-
-					 uint8_t calculated_crc2 = calculate_crc(rx_data2, 4);
-					 if (calculated_crc2 == rx_data2[4]) {
-						 char texto7[50];
-						 //char texto7_1[50];
-
-						 sprintf(buf_tx7, "%.5f",(float)LSBp_decimal);
-						 sprintf(texto7, "-> LSBp (%s)[W] \n ", buf_tx7);
-						 HAL_UART_Transmit(&huart2, (uint8_t*)texto7, strlen(texto7), HAL_MAX_DELAY);
-
-						/* sprintf(buf_tx7, "%.5f",(float)irms_decimal);
-						 sprintf(texto7_1, " Irms (%s) \n", buf_tx7);
-						 HAL_UART_Transmit(&huart2, (uint8_t*)texto7_1, strlen(texto7_1), HAL_MAX_DELAY);*/
-
-					 } else {
-						 char *texto8 = "->Incorrect CRC\r\n	";
-						 HAL_UART_Transmit(&huart2, (uint8_t*)texto8, strlen(texto8), HAL_MAX_DELAY);
-					 }
-
-			 calculated_crc2 = 0;
-			 memset(rx_data2, 0, sizeof(rx_data1));
+			 calculated_crc = 0;
+			 memset(rx_data1, 0, sizeof(rx_data1));
 			 /* Se cierra la comunicacion SCS --> up */
 			 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
-			 delay_ms(800);
-			 inicio =2;
-		  }//--> end for int p
+			 delay_ms(500);
+
+	  	  }//-->end for
+	  //reinicioRegistro1();
+	  delay_ms(1000);
+	  activEnergy();
 
 
-
-
-	  for(int q=0;q<4;q++){
-	  		  reinicioRegistros();
-	  		  	/*CS Inicio de comunicacion */
-	  		  	  HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
-
-	  			   //LED ON
-	  			  HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_SET);
-
-	  			 /*------------------- Solicitud direccion 0x54 Fila 42  PH1 Active Energy [31:0]-------------*/
-	  			 uint8_t data3[5] = {0x54, 0xFF, 0xFF, 0xFF, 0x00};
-	  			 		 /* Calculate CRC */
-	  			 	 	 data3[4] = calculate_crc(data2, 4);
-	  			 		 /* Transmit data + CRC */
-	  				 HAL_SPI_Transmit(&hspi1, data3, STPM3x_FRAME_LEN + 1, HAL_MAX_DELAY); // Transmitir la trama completa (datos + CRC)
-	  				 /*--------------------Recepcion de datos de la direccion 5C (32-bit data + CRC)-------------- */
-	  				 HAL_SPI_Receive(&hspi1, rx_data3, sizeof(rx_data3), HAL_MAX_DELAY);
-
-	  				if(inicio == 2){
-	  						 char *texto9 = "Trama enviada por SPI \n";
-	  						 HAL_UART_Transmit(&huart2, (uint8_t*)texto9, strlen(texto9), HAL_MAX_DELAY);
-	  						 // Enviar datos por UART en formato hexadecimal
-	  						 for (int i = 0; i < sizeof(data3); i++) {
-	  							 sprintf(buf_tx8, "%02X ", data3[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
-	  							 HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx8, strlen(buf_tx8), HAL_MAX_DELAY); // Transmitir el byte por UART
-	  						 }
-	  						 char *texto9_1 = "\n Energia Activa direccion registro 0x54 \n";
-	  						 HAL_UART_Transmit(&huart2, (uint8_t*)texto9_1, strlen(texto9_1), HAL_MAX_DELAY);
-	  						}
-
-	  				for (int i = sizeof(rx_data3) - 1; i >= 0; i--) {
-	  					 sprintf(buf_tx9, "%02X ", rx_data3[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
-	  					 HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx9, strlen(buf_tx9), HAL_MAX_DELAY); // Transmitir el byte por UART
-	  				 	 }
-	  						uint32_t received_data_EA =   (uint32_t)rx_data3[3] << 24 |
-	  													  (uint32_t)rx_data3[2] << 16 |
-	  													  (uint32_t)rx_data3[1] << 8 |
-	  													  (uint32_t)rx_data3[0];
-
-	  					 // Bytes [28:0] para calcular LSBp
-	  						 uint32_t LSBe_bytes = received_data_EA & 0xFFFFFFFF; // Esta máscara tiene los primeros 28 bits
-	  						 // Calcular LSBp según la ecuación dada
-	  					 long long int potencia3 = pow(2,17);
-	  					 double Vref_2 = pow(1.2,2);
-	  					 float LSBe_decimal = ((float)LSBe_bytes * Vref_2 * (1 + 810000.0 / 470)) / (1*3600*7812.5*2*16*Ks*0.875*0.875* potencia3);
-
-	  					 uint8_t calculated_crc3 = calculate_crc(rx_data3, 4);
-	  					 if (calculated_crc3 == rx_data3[4]) {
-	  						 char texto10[50];
-
-	  						 sprintf(buf_tx10, "%.6f",(float)LSBe_decimal);
-	  						 sprintf(texto10, "-> LSBe (%s)[Wh] \n ", buf_tx10);
-	  						 HAL_UART_Transmit(&huart2, (uint8_t*)texto10, strlen(texto10), HAL_MAX_DELAY);
-
-	  					 } else {
-	  						 char *texto11 = "->Incorrect CRC\r\n	";
-	  						 HAL_UART_Transmit(&huart2, (uint8_t*)texto11, strlen(texto11), HAL_MAX_DELAY);
-	  					 }
-
-
-
-
-	  			 calculated_crc3 = 0;
-	  			 memset(rx_data3, 0, sizeof(rx_data3));
-	  			 /* Se cierra la comunicacion SCS --> up */
-	  			 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
-	  			 delay_ms(800);
-	  			 inicio =3;
-	  		  }//--> end for int q
-
-
-
-
-
-
-
-	  	// LED OFF
-	  	HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_RESET);
-
-	  	char *texto_fin = "FIN de comunicacion \n";
+	  	  // LED OFF
+	  	 HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_RESET);
+	  	 char *texto_fin = "FIN de comunicacion \n";
 		 HAL_UART_Transmit(&huart2, (uint8_t*)texto_fin, strlen(texto_fin), HAL_MAX_DELAY);
 		 delay_ms(10);
+
 	  }//-->end if BUTTON_Pin
-
-
-
-
   }
 }
 
 
-void reinicioRegistros(void) {
-  	  /* Pull SYN pin up for 25ms */
-  	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
-  	  delay_ms(25);
-  	  /* Tiempo para bloquear la elección de la interfaz */
-  	  HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
-  	  //Tiempo entre el encendido y el reset del pin(SYN)
-  	  delay_ms (25);
-  	  /*----------------- Pulsos de reinicio de registros STPM32-------------------*/
 
-  	   /* Generate 3 pulses on SYN pin reiniciar  */
-  	   for (int i = 0; i < 2; i++) {
-  	  	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
-  	  	  delay_ms(1);
-  	  	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
-  	  	  delay_ms(1);
-  	   }
-  	   /* Leave SYN pin high */
-  	   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
-  	   delay_ms(1);//Delay from SYN to SCS
-  	   HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
-  	   delay_ms(1);//Reset pulse width
-  	   HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
+void reinicioRegistro1(void) {
+/* Pull SYN pin up for 25ms */
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+delay_ms(25);
+/* Tiempo para bloquear la elección de la interfaz */
+HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
+//Tiempo entre el encendido y el reset del pin(SYN)
+delay_ms (25);
+/*----------------- Pulsos de reinicio de registros STPM32-------------------*/
+
+/* Generate 2 pulses on SYN pin  */
+/*Restablecimiento de registros de medición y reinicio de contadores*/
+for (int i = 0; i < 2; i++) {
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+delay_ms(1);
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+delay_ms(1);
+}
 }
 
+void capturaDatos(void){
+/* Pull SYN pin up for 25ms */
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+delay_ms(25);
+/* Tiempo para bloquear la elección de la interfaz */
+HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
+//Tiempo entre el encendido y el reset del pin(SYN)
+delay_ms (25);
+/* Generate 1 pulses on SYN pin  */
+/*Para la captura de datos*/
+for (int i = 0; i < 1; i++) {
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
+delay_ms(1);
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+delay_ms(1);
+}
+}
 
 void reinicioDSP(void) {
   	  /* Pull SYN pin up for 25ms */
@@ -356,7 +203,7 @@ void reinicioDSP(void) {
   	  delay_ms (25);
   	  /*----------------- Pulsos de reinicio de registros STPM32-------------------*/
 
-  	   /* Generate 3 pulses on SYN pin reiniciar  */
+  	   /* Generate 3 pulses on SYN pin reiniciar configuracion */
   	   for (int i = 0; i < 3; i++) {
   	  	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
   	  	  delay_ms(1);
@@ -376,9 +223,152 @@ void delay_ms(uint32_t ms)
     HAL_Delay(ms);
 }
 
+
+void activEnergy (void){
+for(int q=0;q<41;q++){
+capturaDatos();
+/*CS Inicio de comunicacion */
+HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
+
+//LED ON
+HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_SET);
+
+/*------------------- Solicitud direccion 0x56 Fila 42  PH1 Active Energy [31:0]-------------*/
+uint8_t data3[5] = {0x56, 0xFF, 0xFF, 0xFF, 0x00};
+/* Calculate CRC */
+data3[4] = calculate_crc(data2, 4);
+/* Transmit data + CRC */
+HAL_SPI_Transmit(&hspi1, data3, STPM3x_FRAME_LEN + 1, HAL_MAX_DELAY); // Transmitir la trama completa (datos + CRC)
+/*--------------------Recepcion de datos de la direccion 5C (32-bit data + CRC)-------------- */
+HAL_SPI_Receive(&hspi1, rx_data3, sizeof(rx_data3), HAL_MAX_DELAY);
+
+if(trama_enviada == 1){
+char *texto9 = "Trama enviada por SPI \n";
+HAL_UART_Transmit(&huart2, (uint8_t*)texto9, strlen(texto9), HAL_MAX_DELAY);
+// Enviar datos por UART en formato hexadecimal
+for (int i = 0; i < sizeof(data3); i++) {
+sprintf(buf_tx8, "%02X ", data3[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
+HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx8, strlen(buf_tx8), HAL_MAX_DELAY); // Transmitir el byte por UART
+}
+char *texto9_1 = "\n Energia Activa direccion registro 0x56 \n";
+HAL_UART_Transmit(&huart2, (uint8_t*)texto9_1, strlen(texto9_1), HAL_MAX_DELAY);
+trama_enviada=2;
+}
+
+for (int i = sizeof(rx_data3) - 1; i >= 0; i--) {
+sprintf(buf_tx9, "%02X ", rx_data3[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
+HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx9, strlen(buf_tx9), HAL_MAX_DELAY); // Transmitir el byte por UART
+}
+uint32_t received_data_EA =   (uint32_t)rx_data3[3] << 24 |
+	  (uint32_t)rx_data3[2] << 16 |
+	  (uint32_t)rx_data3[1] << 8 |
+	  (uint32_t)rx_data3[0];
+
+// Bytes [28:0] para calcular LSBp
+uint32_t LSBe_bytes = received_data_EA & 0xFFFFFFF; // Esta máscara tiene los primeros 28 bits
+// Calcular LSBp según la ecuación dada
+long long int potencia3 = pow(2,17);
+float Vref_2 = pow(1.2,2);
+float LSBe_decimal = ((float)LSBe_bytes * Vref_2 * (1 + 810000.0 / 470)) / (1*3600*7812.5*2*16*Ks*0.875*0.875* potencia3);
+
+uint8_t calculated_crc3 = calculate_crc(rx_data3, 4);
+if (calculated_crc3 == rx_data3[4]) {
+char texto10[50];
+
+sprintf(buf_tx10, "%.6f",(float)LSBe_decimal);
+sprintf(texto10, "-> LSBe (%s)[Wh] \n ", buf_tx10);
+HAL_UART_Transmit(&huart2, (uint8_t*)texto10, strlen(texto10), HAL_MAX_DELAY);
+
+} else {
+char *texto11 = "->Incorrect CRC\r\n	";
+HAL_UART_Transmit(&huart2, (uint8_t*)texto11, strlen(texto11), HAL_MAX_DELAY);
+}
+calculated_crc3 = 0;
+memset(rx_data3, 0, sizeof(rx_data3));
+/* Se cierra la comunicacion SCS --> up */
+HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
+delay_ms(2000);
+}//--> end for q
+}
+
+
+void activePower(void){
+	  for(int p=0;p<9;p++){
+		  capturaDatos();
+/*CS Inicio de comunicacion */
+HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
+
+//LED ON
+HAL_GPIO_WritePin(GPIOA, LED_GREEN_Pin, GPIO_PIN_SET);
+
+/*------------------- Solicitud direccion 0x5C Fila 46  PH1 ActivePower [28:0]-------------*/
+uint8_t data2[5] = {0x5C, 0xFF, 0xFF, 0xFF, 0x00};
+/* Calculate CRC */
+data2[4] = calculate_crc(data2, 4);
+/* Transmit data + CRC */
+HAL_SPI_Transmit(&hspi1, data2, STPM3x_FRAME_LEN + 1, HAL_MAX_DELAY); // Transmitir la trama completa (datos + CRC)
+/*--------------------Recepcion de datos de la direccion 5C (32-bit data + CRC)-------------- */
+HAL_SPI_Receive(&hspi1, rx_data2, sizeof(rx_data2), HAL_MAX_DELAY);
+
+if(trama_enviada == 2){
+char *texto6 = "Trama enviada por SPI \n";
+HAL_UART_Transmit(&huart2, (uint8_t*)texto6, strlen(texto6), HAL_MAX_DELAY);
+// Enviar datos por UART en formato hexadecimal
+for (int i = 0; i < sizeof(data2); i++) {
+sprintf(buf_tx5, "%02X ", data2[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
+HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx5, strlen(buf_tx5), HAL_MAX_DELAY); // Transmitir el byte por UART
+}
+char *texto6_1 = "\n Potecia Activa direccion registro 0x5C \n";
+HAL_UART_Transmit(&huart2, (uint8_t*)texto6_1, strlen(texto6_1), HAL_MAX_DELAY);
+trama_enviada=3;
+}
+
+for (int i = sizeof(rx_data2) - 1; i >= 0; i--) {
+sprintf(buf_tx6, "%02X ", rx_data2[i]); // Convertir el byte a formato hexadecimal y guardarlo en el buffer
+HAL_UART_Transmit(&huart2, (uint8_t*)buf_tx6, strlen(buf_tx6), HAL_MAX_DELAY); // Transmitir el byte por UART
+}
+uint32_t received_data_PA =   (uint32_t)rx_data2[3] << 24 |
+						  (uint32_t)rx_data2[2] << 16 |
+						  (uint32_t)rx_data2[1] << 8 |
+						  (uint32_t)rx_data2[0];
+
+// Bytes [28:0] para calcular LSBp
+uint32_t LSBp_bytes = received_data_PA & 0x0FFFFFFF; // Esta máscara tiene los primeros 28 bits
+// Calcular LSBp según la ecuación dada
+long long int potencia2 = pow(2,28);
+double Vref2 = pow(1.2,2);
+float LSBp_decimal = ((float)LSBp_bytes * Vref2 * (1 + 810000.0 / 470)) / (1*2*16*Ks*0.875*0.875* potencia2);
+
+uint8_t calculated_crc2 = calculate_crc(rx_data2, 4);
+if (calculated_crc2 == rx_data2[4]) {
+char texto7[50];
+//char texto7_1[50];
+
+sprintf(buf_tx7, "%.5f",(float)LSBp_decimal);
+sprintf(texto7, "-> LSBp (%s)[W] \n ", buf_tx7);
+HAL_UART_Transmit(&huart2, (uint8_t*)texto7, strlen(texto7), HAL_MAX_DELAY);
+
+/* sprintf(buf_tx7, "%.5f",(float)irms_decimal);
+sprintf(texto7_1, " Irms (%s) \n", buf_tx7);
+HAL_UART_Transmit(&huart2, (uint8_t*)texto7_1, strlen(texto7_1), HAL_MAX_DELAY);*/
+
+} else {
+char *texto8 = "->Incorrect CRC\r\n	";
+HAL_UART_Transmit(&huart2, (uint8_t*)texto8, strlen(texto8), HAL_MAX_DELAY);
+}
+
+			 calculated_crc2 = 0;
+			 memset(rx_data2, 0, sizeof(rx_data1));
+			 /* Se cierra la comunicacion SCS --> up */
+			 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
+			 delay_ms(400);
+			 reinicioRegistros1();
+		  }//--> end for int p
+}
+
+
+
 /* -----------------  CRC calculation function  ----------------------- */
-
-
 // Función para calcular el CRC
 static void Crc8Calc(uint8_t u8Data)
 {
