@@ -61,7 +61,12 @@ int main(void)
   while (1)
   {
 	  if (HAL_GPIO_ReadPin(GPIOC, BUTTON_Pin) == GPIO_PIN_RESET && trama_enviada == 0) {
+
+    //Pin PA_9 pulso de salida de voltaje hacia la placa de medicion.
+	 HAL_GPIO_WritePin(GPIOA, OUT3_3V_Pin ,GPIO_PIN_SET);
+
 	  reinicioRegistro1();
+
 	  for(int j=0;j<16;j++){
       capturaDatos();
 	  /*CS Inicio de comunicacion */
@@ -138,9 +143,10 @@ int main(void)
 			 delay_ms(500);
 
 	  	  }//-->end for
-	  //reinicioRegistro1();
-	  delay_ms(1000);
+	  delay_ms(100);
 	  activEnergy();
+	  delay_ms(200);
+	  activePower();
 
 
 	  	  // LED OFF
@@ -225,7 +231,7 @@ void delay_ms(uint32_t ms)
 
 
 void activEnergy (void){
-for(int q=0;q<41;q++){
+for(int q=0;q<7;q++){
 capturaDatos();
 /*CS Inicio de comunicacion */
 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
@@ -287,13 +293,13 @@ calculated_crc3 = 0;
 memset(rx_data3, 0, sizeof(rx_data3));
 /* Se cierra la comunicacion SCS --> up */
 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
-delay_ms(2000);
+delay_ms(800);
 }//--> end for q
 }
 
 
 void activePower(void){
-	  for(int p=0;p<9;p++){
+	  for(int p=0;p<7;p++){
 		  capturaDatos();
 /*CS Inicio de comunicacion */
 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_RESET);
@@ -362,7 +368,6 @@ HAL_UART_Transmit(&huart2, (uint8_t*)texto8, strlen(texto8), HAL_MAX_DELAY);
 			 /* Se cierra la comunicacion SCS --> up */
 			 HAL_GPIO_WritePin(GPIOB, SPI1_CS_Pin, GPIO_PIN_SET);
 			 delay_ms(400);
-			 reinicioRegistros1();
 		  }//--> end for int p
 }
 
