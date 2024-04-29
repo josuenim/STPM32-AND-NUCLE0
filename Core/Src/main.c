@@ -39,7 +39,7 @@ uint8_t data1[5];
 uint8_t data2[5];
 uint8_t data3[5];
 
-double Ks = 2.4e-3;
+double Ks = 0.3e-3;
 
 
 
@@ -62,7 +62,7 @@ int main(void)
   {
 	  if (HAL_GPIO_ReadPin(GPIOC, BUTTON_Pin) == GPIO_PIN_RESET && trama_enviada == 0) {
 
-    //Pin PA_9 pulso de salida de voltaje hacia la placa de medicion.
+    //Pin PA_9 pulso para encender la placa de medicion atraves de circuito mosfet.
 	 HAL_GPIO_WritePin(GPIOA, OUT3_3V_Pin ,GPIO_PIN_SET);
 
 	  reinicioRegistro1();
